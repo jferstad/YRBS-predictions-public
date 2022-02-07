@@ -1,0 +1,2 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.0119062651927612,0.0505628282699205,0.0363654880249616,0.0374061898831332,Not Using Identity Responses,2013,NJ,lassolog,767,767

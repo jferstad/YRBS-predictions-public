@@ -1,0 +1,3 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.134042813981521,0.112135460410539,0.118178774921122,0.118178774921122,Using Contact Responses,2017,SC,lasso,1501,1501
+0.134042813981521,0.112135460410539,0.112989729503794,0.112989729503794,Not Using Contact Responses,2017,SC,lasso,1501,1501

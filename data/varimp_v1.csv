@@ -1,0 +1,143 @@
+﻿var,imp,rel_imp,desc,incl_v1,incl_v2,incl_v3,pred,MA_2017,MA_2015,VT_2017,VT_2015,NM_2017,NM_2015,MD_2017,MD_2015,TX_2017,CT_2017,CT_2015,GA_2013,OH_2013,IN_2015,Q
+age,0.000271193,100%,,,y,,y,q1,q1,q1,q1,q1,q1,q1,q1,q1,q1,q1,q1,q1,q1,How old are you?
+bmi,0.001516008,559%,,y,n,n,y,,,,,,,,,,,,,,,
+bmipct,0.00146604,541%,,y,y,y,y,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,bmipct,0-100; percentile
+grade,0.000299925,111%,,,,,y,q3,q3,q3,q3,,q3,,,,,,,,,In what grade are you
+q10,0.000596842,220%,DUI,y,n,n,y,q10,q11,,q11,,,,,,,,,,,"During the past 30 days, how many times did you drive a car or other vehicle when you had been drinking
+alcohol? "
+q11,0.000761016,281%,text/email while driving,y,n,n,y,q11,q12,,q12,,,,,,,,,,,"During the past 30 days, on how many days did you text or e-mail while driving a car or other vehicle?"
+q12,0.000415624,153%,,,,,y,q12,q13,,,,,,,,,,,,,"During the past 30 days, on how many days did you carry a weapon such as a gun, knife, or club?"
+q13,0.000216832,80%,,,,,y,q13,,,q15,,,,,,,,,,,"During the past 30 days, on how many days did you carry a weapon such as a gun, knife, or club on school
+property?"
+q14,0.00022647,84%,,,,,y,q14,q14,,,,,,,,,,,,,"During the past 12 months, on how many days did you carry a gun? (Do not count the days when you carried a
+gun only for hunting or for a sport, such as target shooting.)"
+q15,3.28E-05,12%,,,,,y,q15,q16,,q16,,,,,,,,,,,"During the past 30 days, on how many days did you not go to school because you felt you would be unsafe at
+school or on your way to or from school?"
+q16,0.000248379,92%,,,,,y,q16,q17,,q17,,,,,,,,,,,"During the past 12 months, how many times has someone threatened or injured you with a weapon such as a gun, knife, or club on school property?"
+q17,0.000224212,83%,,,,,y,q17,q18,,q18,,,,,,,,,,,"During the past 12 months, how many times were you in a physical fight?"
+q18,0.00040043,148%,,,,,y,q18,q20,,q20,,,,,,,,,,,"During the past 12 months, how many times were you in a physical fight on school property?"
+q19,0.001990315,734%,forced sex,y,y,n,y,q19,q21,q19,q21,q19,q21,q19,q21,q19,q19,q21,,q21,q21,Have you ever been physically forced to have sexual intercourse when you did not want to?
+q20,0.000972865,359%,how much forced sex,y,y,y,y,q20,,q20,,q20,q23,q20,,q20,,,,,,"During the past 12 months, how many times did anyone force you to do sexual things that you did not want to do? (Count such things as kissing, touching, or being physically forced to have sexual intercourse.)"
+q21,0.000779314,287%,forced sex by partner,y,y,y,y,q21,q23,q21,,q21,,q21,q23,q21,q21,q23,,q23,q23,"During the past 12 months, how many times did someone you were dating or going out with force you to do sexual things that you did not want to do? (Count such things as kissing, touching, or being physically forced to have sexual intercourse.)"
+q22,0.001030199,380%,hurt by romantic partner,y,y,y,y,q22,q22,q22,q22,q22,q22,q22,q22,q22,q22,q22,q22,,q22,"During the past 12 months, how many times did someone you were dating or going out with physically hurt
+you on purpose? (Count such things as being hit, slammed into something, or injured with an object or weapon.)"
+q23,0.000434705,160%,bullied at school,y,y,n,y,q23,q24,q23,,q23,q24,q23,q24,q23,q23,q24,q24,q24,q24,"During the past 12 months, have you ever been bullied on school property?"
+q24,0.000452933,167%,electronic bullying,y,y,y,y,q24,q25,q24,q25,q24,q25,q24,q25,q24,q24,q25,q25,q25,q25,"During the past 12 months, have you ever been electronically bullied? (Count being bullied through texting, Instagram, Facebook, or other social media.)"
+q25,0.000474877,175%,feeling hopeless,y,y,y,y,q25,q26,q25,q26,q25,q26,q25,q26,q25,q25,q26,q26,q26,q26,"During the past 12 months, did you ever feel so sad or hopeless almost every day for two weeks or more in a row that you stopped doing some usual activities?"
+q26,0.001201891,443%,seriously consider suicide,y,y,y,y,q26,q27,q26,,q26,q27,q26,q27,q26,q26,q27,q27,q27,q27,"During the past 12 months, did you ever seriously consider attempting suicide?"
+q27,0.00133301,492%,suicide plan,y,y,y,y,q27,q28,q27,q28,q27,q28,q27,q28,q27,,,q28,q28,q28,"During the past 12 months, did you make a plan about how you would attempt suicide?"
+q28,0.000364124,134%,,,,,y,q28,q29,,q29,,,,,,,,,,,"During the past 12 months, how many times did you actually attempt suicide?"
+q29,0.000322389,119%,,,,,y,q29,q30,,q30,,,,,,,,,,,"If you attempted suicide during the past 12 months, did any attempt result in an injury, poisoning, or overdose
+that had to be treated by a doctor or nurse?"
+q30,0.000587806,217%,cigarette,y,y,n,y,q30,q31,q30,,q30,q31,q30,,q30,,,q31,,q31,"Have you ever tried cigarette smoking, even one or two puffs?"
+q31,0.000659455,243%,cigarette,y,y,n,y,q31,q32,q31,,q31,,q31,,q31,,,,,,"How old were you when you first tried cigarette smoking, even one or two puffs?"
+q32,0.000273389,101%,,,,,y,q32,q33,,q33,,,,,,,,,,,"During the past 30 days, on how many days did you smoke cigarettes?"
+q33,0.000372634,137%,,,,,y,,,,q34,,,,,,,,,,,"During the past 30 days, on the days you smoked, how many cigarettes did you smoke per day?"
+q34,0.000583467,215%,electric vape,y,y,n,y,q34,q39,q34,q39,q34,q39,q34,q39,q34,,,,,q39,Have you ever used an electronic vapor product?
+q35,0.000329943,122%,,,,,y,q35,q40,,q40,,,,,,,,,,,"During the past 30 days, on how many days did you use an electronic vapor product?"
+q36,0.00027192,100%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how did you usually get your own electronic vapor products? (Select only one
+response.)"
+q37,0.000559597,206%,tobacco use,y,y,y,y,q37,q37,q37,q37,q37,q37,q37,q37,q37,,,q39,,q37,"During the past 30 days, on how many days did you use chewing tobacco, snuff, dip, snus, or dissolvable tobacco products, such as Redman, Levi Garrett, Beechnut, Skoal, Skoal Bandits, Copenhagen, Camel Snus, Marlboro Snus, General Snus, Ariva, Stonewall, or Camel Orbs? (Do not count any electronic vapor products.)"
+q38,0.000354819,131%,,,,,y,q38,q38,,q38,,,,,,,,,,,"During the past 30 days, on how many days did you smoke cigars, cigarillos, or little cigars?"
+q39,0.000201987,74%,,,,,y,,,,q36,,,,,,,,,,,"During the past 12 months, did you ever try to quit using all tobacco products, including cigarettes, cigars,
+smokeless tobacco, shisha or hookah tobacco, and electronic vapor products?"
+q40,0.00121592,448%,alcohol use,y,y,y,y,q40,q41,q40,,q40,,q40,q41,q40,,,q41,,q41,"During your life, on how many days have you had at least one drink of alcohol?"
+q41,0.000963557,355%,age when alcohol,y,n,n,y,,q42,,q42,,,,,,,q42,,,,How old were you when you had your first drink of alcohol other than a few sips?
+q42,0.000678948,250%,alcohol use,y,n,n,y,q42,q43,,q43,,,,,,,,,,,"During the past 30 days, on how many days did you have at least one drink of alcohol?"
+q43,0.00050534,186%,getting alcohol,y,n,n,y,,,,q46,,,,,,,,,,,"During the past 30 days, how did you usually get the alcohol you drank?"
+q44,0.000471569,174%,binge drinking,y,n,n,y,q44,q44,,q44,,,,,,,,,,,"During the past 30 days, on how many days did you have 4 or more drinks of alcohol in a row (if you are female) or 5 or more drinks of alcohol in a row (if you are male)?"
+q45,0.000536378,198%,alcohol binge drinking,y,n,n,y,,,,q45,,,,,,,,,,,"During the past 30 days, what is the largest number of alcoholic drinks you had in a row?"
+q46,0.001730964,638%,marijuana use,y,y,y,y,q46,q47,q46,,q46,,q46,q47,q46,q46,q47,q47,q47,q47,"During your life, how many times have you used marijuana?"
+q47,0.002149806,793%,age when trying marijuana,y,y,y,y,q47,q48,q47,q48,q47,q48,q47,q48,q47,q47,q48,q48,q48,q48,How old were you when you tried marijuana for the first time?
+q48,0.000992239,366%,marijuana in last 30 days,y,n,n,y,q48,q49,,q49,,,,,,,,,,,"During the past 30 days, how many times did you use marijuana?"
+q49,0.000338738,125%,,,,,y,q49,q50,,q50,,,,,,,,,,,"During your life, how many times have you used any form of cocaine, including powder, crack, or freebase?"
+q50,0.00059422,219%,sniff glue,y,y,n,y,,,q50,q51,q50,,q50,q51,q50,q50,q51,q51,q51,q51,"During your life, how many times have you sniffed glue, breathed the contents of aerosol spray cans, or inhaled any paints or sprays to get high?"
+q51,0.00034978,129%,,,,,y,q51,q52,,q52,,,,,,,,,,,"During your life, how many times have you used heroin (also called smack, junk, or China White)?"
+q52,0.000457421,169%,meth,y,y,n,y,q52,q53,q52,q53,q52,q53,q52,q53,q52,q52,q53,,,q53,"During your life, how many times have you used methamphetamines (also called speed, crystal, crank, or ice)?"
+q53,0.000755092,278%,ecstacy,y,y,y,y,q53,q54,q53,,q53,q54,q53,q54,q53,q53,q54,q54,,q54,"During your life, how many times have you used ecstasy (also called MDMA)?"
+q54,0.000417609,154%,,,,,y,q54,q55,,,,,,,,,,,,,"During your life, how many times have you used synthetic marijuana (also called K2, Spice, fake weed, King Kong, Yucatan Fire, Skunk, or Moon Rocks)?"
+q55,0.000233738,86%,,,,,y,,,,,,,,,,,,,,,"During your life, how many times have you taken steroid pills or shots without a doctor's prescription?"
+q56,0.000956607,353%,prescription drugs,y,y,y,y,,,q56,q104,q56,,q56,,q56,q56,,,q96,,"During your life, how many times have you taken prescription pain medicine without a doctor's prescription or differently than how a doctor told you to use it? (Count drugs such as codeine, Vicodin, OxyContin, Hydrocodone, and Percocet.)"
+q57,0.000350052,129%,,,,,y,,,,,,,,,,,,,,,"During your life, how many times have you used a needle to inject any illegal drug into your body?"
+q58,0.000725073,267%,illegal drugs at school,y,y,y,y,q58,q59,q58,q59,q58,q59,q58,q59,q58,q58,q59,q58,q58,q59,"During the past 12 months, has anyone offered, sold, or given you an illegal drug on school property?"
+q59,0.002368775,873%,ever sex,y,y,y,y,q59,q60,q59,,q59,q60,q59,q60,q59,q59,q60,,q59,q60,Have you ever had sexual intercourse?
+q60,0.006072971,2239%,age when first sex,y,y,y,y,q60,q61,q60,q61,q60,q61,q60,q61,q60,q60,q61,,q60,q61,How old were you when you had sexual intercourse for the first time?
+q61,0.004537563,1673%,number of sex partners,y,y,n,y,q61,q62,q61,q62,q61,q62,q61,q62,q61,q61,q62,,q61,q62,"During your life, with how many people have you had sexual intercourse?"
+q62,0.005123603,1889%,number of sex partners,y,y,y,y,q62,q63,q62,q63,q62,q63,q62,q63,q62,q62,q63,,q62,q63,"During the past 3 months, with how many people did you have sexual intercourse?"
+q63,0.004749454,1751%,alcohol/drugs with sex,y,y,y,y,q63,q64,q63,q64,q63,q64,q63,q64,q63,q63,q64,,q63,q64,Did you drink alcohol or use drugs before you had sexual intercourse the last time?
+q64,0.004863024,1793%,condom use,y,y,y,y,q64,q65,q64,q65,q64,q65,q64,q65,q64,q64,q65,,q64,q65,"The last time you had sexual intercourse, did you or your partner use a condom?"
+q65,0.007657853,2824%,contraception use,y,y,y,y,q65,q66,q65,q66,q65,q66,q65,q66,q65,q65,q66,,q65,q66,"The last time you had sexual intercourse, what one method did you or your partner use to prevent pregnancy? "
+q66,,,,,y,,n,q66,q67,q66,q67,q66,q67,,q67,q66,q66,q67,,,q67,"During your life, with whom have you had sexual contact?"
+q67,,,,,y,,n,q67,q68,q67,q68,q67,q68,q67,q68,q67,q67,q68,,,q68,Which of the following best describes you? (Sexual identity)
+q68,0.000512957,189%,weight,y,n,n,y,q68,q69,,q69,,,,,,,,,q66,,How do you describe your weight?
+q69,0.000419926,155%,,,,,y,q69,q70,,,,,,,,,,,,,Which of the following are you trying to do about your weight?
+q70,0.000221646,82%,,,,,y,q70,q71,,,,,,,,,,,,,"During the past 7 days, how many times did you drink 100% fruit juices such as orange juice, apple juice, or grape juice? (Do not count punch, Kool-Aid, sports drinks, or other fruit-flavored drinks.)"
+q71,0.000242867,90%,,,,,y,q71,q72,,,,,,,,,,,,,"During the past 7 days, how many times did you eat fruit? (Do not count fruit juice.)"
+q72,0.000441973,163%,green salad,y,n,n,y,q72,q73,,,,,,,,,,,,,"During the past 7 days, how many times did you eat green salad?"
+q73,0.000356672,132%,,,,,y,q73,q74,,,,,,,,,,,,,"During the past 7 days, how many times did you eat potatoes? (Do not count french fries, fried potatoes, or potato chips.)"
+q74,0.000385714,142%,,,,,y,q74,q75,,,,,,,,,,,,,"During the past 7 days, how many times did you eat carrots?"
+q75,0.000395915,146%,,,,,y,q75,q76,,,,,,,,,,,,,"During the past 7 days, how many times did you eat other vegetables? (Do not count green salad, potatoes, or carrots.) A. I did not"
+q76,0.000270683,100%,,,,,y,q76,q77,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a can, bottle, or glass of soda or pop, such as Coke, Pepsi, or Sprite? (Do not count diet soda or diet pop.)"
+q77,0.000439612,162%,milk,y,n,n,y,q77,q78,,,,,,,,,,,,,"During the past 7 days, how many glasses of milk did you drink? (Count the milk you drank in a glass or cup, from a carton, or with cereal. Count the half pint of milk served at school as equal to one glass.)"
+q78,0.000440355,162%,breakfast,y,n,n,y,q78,q79,,,,,,,,,,,,,"During the past 7 days, on how many days did you eat breakfast?"
+q79,0.00076573,282%,physicially active,y,y,y,y,q79,q80,q79,,q79,q80,q79,q80,q79,q79,q80,q80,q80,q80,"During the past 7 days, on how many days were you physically active for a total of at least 60 minutes per day? (Add up all the time you spent in any kind of physical activity that increased your heart rate and made you breathe hard some of the time.)"
+q8,0.00065951,243%,seat belt,y,n,n,y,,,,,,,,,,,,,,,How often do you wear a seat belt when riding in a car driven by someone else?
+q80,0.000503688,186%,hours of TV,y,n,n,y,,,,,,,,,,,,,,,"On an average school day, how many hours do you watch TV?"
+q81,0.000165796,61%,,,,,y,q81,q82,,,,,,,,,,,,,"On an average school day, how many hours do you play video or computer games or use a computer for something that is not school work? (Count time spent on things such as Xbox, PlayStation, an iPad or other tablet, a smartphone, texting, YouTube, Instagram, Facebook, or other social media.)"
+q82,0.00048459,179%,PE class,y,y,n,y,q82,q83,q82,,q82,q83,q82,q83,q82,q82,q83,q83,,q83,"In an average week when you are in school, on how many days do you go to physical education (PE) classes?"
+q83,0.000791188,292%,sports team participation,y,y,y,y,,,q83,,q83,,q83,,q83,,,q84,q84,q84,"During the past 12 months, on how many sports teams did you play? (Count any teams run by your school or community groups.)"
+q84,0.000266731,98%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, how many times did you have a concussion from playing a sport or being physically active?"
+q85,0.000485365,179%,HIV test,y,y,y,y,q85,q85,q85,,q85,q85,q85,q85,q85,q85,q85,,,q85,"Have you ever been tested for HIV, the virus that causes AIDS? (Do not count tests done if you donated blood.)"
+q86,0.000215739,80%,,,,,y,,,,,,,,,,,,,,,"When was the last time you saw a dentist for a check-up, exam, teeth cleaning, or other dental work?"
+q87,0.000341298,126%,,,,,y,,,,,,,,,,,,,,,Has a doctor or nurse ever told you that you have asthma?
+q88,0.000356316,131%,,,,,y,q88,q88,,,,,,,,,,,,,"On an average school night, how many hours of sleep do you get?"
+q89,0.000497456,183%,grades in school,y,y,y,y,q89,q89,q89,q89,q89,q89,q89,q89,q89,q89,q89,,q87,q89,"During the past 12 months, how would you describe your grades in school?"
+q9,0.000242213,89%,,,,,y,q9,q10,,,,,,,,,,,,,"During the past 30 days, how many times did you ride in a car or other vehicle driven by someone who had been drinking alcohol?"
+qalcoholschool,0.000169504,63%,,,,,y,q97,q98,,,,,,,,,,,,,"During the past 30 days, on how many days did you have at least one drink of alcohol on school property?"
+qbikehelmet,0.000239053,88%,,,,,y,,,,,,,,,,,,,,,"When you rode a bicycle during the past 12 months, how often did you wear a helmet?"
+qbullygay,0.001055327,389%,bullied for being gay,y,n,n,y,,,,,,,,,,,,,,,"During the past 12 months, have you ever been the victim of teasing or name calling because someone thought you were gay, lesbian, or bisexual?"
+qbullygender,1.89E-05,7%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, have you ever been the victim of teasing or name calling because of your gender?"
+qbullyweight,0.000116034,43%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, have you ever been the victim of teasing or name calling because of your weight, size, or physical appearance?"
+qcelldriving,0.000117887,43%,,,,,y,q94,q94,,,,,,,,,,,,,"During the past 30 days, on how many days did you talk on a cell phone while driving a car or other vehicle?"
+qchewtobschool,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, on how many days did you use chewing tobacco, snuff, or dip on school property?"
+qchokeself,0,0%,,,,,y,,,,,,,,,,,,,,,"Have you ever been choked by someone or tried to choke yourself on purpose, such as with a belt, towel, or rope, for the feeling or experience it caused? (This is also called the Choking Game, Knock Out, Space Monkey, Flatlining, or the Fainting Game.)"
+qcigschool,2.08E-05,8%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, on how many days did you smoke cigarettes on school property?"
+qcoffeetea,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a cup, can, or bottle of coffee, coffee drinks, or any kind of tea?"
+qconcentrating,2.88E-05,11%,,,,,y,,,,,,,,,,,,,,,"Because of a physical, mental, or emotional problem, do you have serious difficulty concentrating, remembering, or making decisions?"
+qcurrentasthma,0.000245981,91%,,,,,y,,,,,,,,,,,,,,,Do you still have asthma?
+qcurrentcocaine,6.53E-06,2%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you use any form of cocaine, including powder, crack, or freebase?"
+qcurrentheroin,9.64E-06,4%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you use heroin (also called smack, junk, or China White)?"
+qcurrentmeth,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you use methamphetamines (also called speed, crystal, crank, or ice)?"
+qdietpop,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a can, bottle, or glass of diet soda or pop, such as Diet Coke, Diet Pepsi, or Sprite Zero?"
+qdrivemarijuana,2.68E-05,10%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you drive a car or other vehicle when you had been using marijuana (also called grass, pot, or weed)?"
+qenergydrink,6.60E-05,24%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a can, bottle, or glass of an energy drink, such as Red Bull or Jolt? (Do not count diet energy drinks or sports drinks such as Gatorade or PowerAde.)"
+qfastfood,7.79E-05,29%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, on how many days did you eat at least one meal or snack from a fast food restaurant such as McDonald's, Taco Bell, or KFC?"
+qfoodallergy,8.54E-06,3%,,,,,y,,,,,,,,,,,,,,,"Are there any foods that you have to avoid because eating the food could cause an allergic reaction, like skin rashes, swelling, itching, vomiting, coughing, or trouble breathing?"
+qgenderexp,0.001955767,721%,gender expression,y,n,n,y,q115,,,,,,,,,,,,,,"A person's appearance, style, dress, or the way they walk or talk may affect how people describe them. How do you think other people at school would describe you?"
+qhallucdrug,0.000148607,55%,,,,,y,,,,,,,,,,,,,,,"During your life, how many times have you used hallucinogenic drugs, such as LSD, acid, PCP, angel dust, mescaline, or mushrooms?"
+qhowmarijuana,0.000127886,47%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how did you usually use marijuana?"
+qindoortanning,6.92E-05,26%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, how many times did you use an indoor tanning device such as a sunlamp, sunbed, or tanning booth? (Do not count getting a spray-on tan.)"
+qmarijuanaschool,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you use marijuana on school property?"
+qmusclestrength,0.000107609,40%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, on how many days did you do exercises to strengthen or tone your muscles, such as push-ups, sit-ups, or weight lifting?"
+qprescription30d,0.00023296,86%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how many times did you take a prescription drug (such as OxyContin, Percocet, Vicodin, codeine, Adderall, Ritalin, or Xanax) without a doctor's prescription?"
+qpropertydamage,8.32E-05,31%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, how many times has someone stolen or deliberately damaged your property such as your car, clothing, or books on school property?"
+qspeakenglish,0,0%,,,,,y,,,,,,,,,,,,,,,How well do you speak English?
+qsportsdrink,9.59E-05,35%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a can, bottle, or glass of a sports drink such as Gatorade or PowerAde? (Do not count low-calorie sports drinks such as Propel or G2.)"
+qsugardrink,4.90E-05,18%,,,,,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a can, bottle, or glass of a sugar-sweetened beverage such as lemonade, sweetened tea or coffee drinks, flavored milk, Snapple, or Sunny Delight? (Do not count soda or pop, sports drinks, energy drinks, or 100% fruit juice.)"
+qsunburn,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 12 months, how many times have you had a sunburn? (Count the number of times even a small part of your skin turned red or hurt for 12 hours or more after being outside in the sun or after using a sunlamp or other indoor tanning device.)"
+qsunscreenuse,0.000190868,70%,,,,,y,,,,,,,,,,,,,,,"When you are outside for more than one hour on a sunny day, how often do you wear sunscreen with an SPF of 15 or higher?"
+qtaughtbc,0,0%,,,,,y,q105,q104,,,,,,,,,,,,,Have you ever been taught in school about birth control methods?
+qtaughtcondom,0,0%,,,,,y,q104,q103,,,,,,,,,,,,,"Have you ever been taught in school about how to use a condom to prevent pregnancy or sexually transmitted diseases (STDs), including HIV?"
+qtaughthiv,0.000152377,56%,,,,,y,q103,q102,,,,,,,,,,,,,Have you ever been taught about AIDS or HIV infection in school?
+qtaughtsexed,0.000113225,42%,,,,,y,,,,,,,,,,,,,,,Have you ever had sex education in school?
+qtaughtstd,0,0%,,,,,y,q102,,,,,,,,,,,,,,Have you ever been taught in school about sexually transmitted diseases (STDs)?
+qtransgender,,,,,y,,n,q92,q93,q91,,q110,,q109,,,,,,,,Some people describe themselves as transgender when their sex at birth does not match the way they think or feel about their gender. Are you transgender?
+qtypealcohol,0,0%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, what type of alcohol did you usually drink? (Select only one response.)"
+qwater,0.000540479,199%,water consumption,y,n,n,y,,,,,,,,,,,,,,,"During the past 7 days, how many times did you drink a bottle or glass of plain water? (Count tap, bottled, and unflavored sparkling water.)"
+qwenthungry,0.000200817,74%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, how often did you go hungry because there was not enough food in your home?"
+qwheresleep,0.000186998,69%,,,,,y,,,,,,,,,,,,,,,"During the past 30 days, where did you usually sleep?"
+race4,0.000315173,116%,,,,,y,,,,,,,,,,,,,,,4-level variable from race and ethnicity questions: 1 = “White” 2 = “Black or African American” 3 = “Hispanic/Latino” 4 = “All Other Races”
+race7,0.00023371,86%,,,,,y,,,,,,,,,,,,,,,7-level variable from race and ethnicity questions: 1 = “American Indian/Alaska Native” 2 = “Asian” 3 = “Black or African American” 4 = “Hispanic/Latino” 5 = “Native Hawaiian/Other Pacific Islander” 6 = “White” 7 = “Multiple Races (Non-Hispanic)”
+sex,0.005671551,2091%,,y,y,y,y,q2,q2,q2,q2,q2,q2,q2,q2,q2,q2,q2,q2,q2,q2,"1: female, 2: male"
+stheight,,,,,,,y,,,,,,,,,,,,,,,How tall are you without your shoes on?
+stweight,,,,,,,y,,,,,,,,,,,,,,,How much do you weigh without your shoes on?

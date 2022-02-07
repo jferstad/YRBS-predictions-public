@@ -1,0 +1,2 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.0119062651927612,0.0505628282699205,0.0365704993608455,0.0377048727078856,Not Using Identity Responses,2013,NJ,ridgelog,767,767

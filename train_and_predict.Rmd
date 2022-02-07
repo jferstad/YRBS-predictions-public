@@ -1,0 +1,528 @@
+---
+title: "Train Models and Make Leave-One-Out State-level Predictions"
+output: md_document
+---
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+N_CORES = 6
+
+# install.packages(c('xgboost','ranger','doMC'), Ncpus = N_CORES)
+
+library(doMC)
+registerDoMC(cores = N_CORES)
+
+library(ranger)
+library(xgboost)
+library(glmnet)
+library(data.table)
+library(ggplot2)
+library(Matrix)
+library(parallel)
+library(boot)
+options(repr.plot.height = 800, repr.plot.width = 1200)
+```
+
+## Training Data Preparation
+
+```{r}
+states_combined_dt = fread('~/YRBS_predictions/data/combined_pred_data.csv')
+
+## REMOVE THIS TO RUN ON FULL DATA ##
+# Test sample (for speed when testing)
+states_combined_dt = states_combined_dt[sitecode %in% c("NY","CA","VT","CT")]
+
+# Filter to state-years in 2013 or later than include responses to at least one one of the focal outcomes
+state_years_w_responses = unique(states_combined_dt[year>= 2013 & (!is.na(q66) | !is.na(q67)), .(sitecode, year)])
+subset_dt = merge(states_combined_dt, state_years_w_responses, by = c('sitecode','year'))
+
+# Define the predictor variables to include and subset to these along with the focal outcomes
+id_vars = c('sitecode', 'census_region', 'census_division', 'year', 'weight')
+varimp_inds = fread('~/YRBS_predictions/data/varimp_v1.csv')
+modeling_vars = varimp_inds[, var]
+ss_vars = intersect(c(id_vars, modeling_vars),colnames(subset_dt))
+subset_dt = subset_dt[, ..ss_vars]
+
+# Create tables of state-years that have answers to each focal question
+state_years_w_q66 = unique(subset_dt[!is.na(q66), .(sitecode, year)])
+state_years_w_q66[, have_q66 := 1]
+state_years_w_q67 = unique(subset_dt[!is.na(q67), .(sitecode, year)])
+state_years_w_q67[, have_q67 := 1]
+
+# List predictors
+preds = intersect(varimp_inds[pred == "y", var], colnames(subset_dt))
+print(preds)
+```
+
+### Prepare training data for Q66 (same-sex contact).
+
+We create training datasets that duplicate the data from states with both focal outcomes so we can predict each focal outcome both with and without using the other outcome as a predictor.
+
+```{r}
+# Missing predictors will be filled by the mode value
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+q66_dt = merge(subset_dt, state_years_w_q66, by = c('sitecode','year'))
+
+# Add an indicator for whether q67 answer is present
+q66_dt = merge(q66_dt, state_years_w_q67, by = c('sitecode','year'), all.x=TRUE)
+q66_dt[is.na(have_q67), have_q67 := 0]
+
+q66_wo_q67 = q66_dt[have_q67 == 0]
+q66_wo_q67[, predset := "Not Using Identity Responses"]
+
+# Duplicate states that have q67 answer as well
+q66_w_q67 = q66_dt[have_q67 == 1]
+q66_w_q67_null_q67 = copy(q66_w_q67)
+q66_w_q67_null_q67[, q67 := NA]
+
+q66_w_q67[, predset := "Using Identity Responses"]
+q66_w_q67_null_q67[, predset := "Not Using Identity Responses"]
+
+q66_dup_dt = rbind(q66_wo_q67, q66_w_q67, q66_w_q67_null_q67)
+
+# Encode outcome (same sex contacts)
+# 1 if a respondent answers that they have had sexual contacts with both sexes,
+# or if they report sexual contacts with their own sex.
+#q66_dup_dt[, Y := ifelse(Y_missing==0, 0, NA)] # use this if want to train only on non-missing responses
+q66_dup_dt[, Y := 0]
+q66_dup_dt[q66 == 4, Y := 1]
+q66_dup_dt[sex == 1 & q66 == 2, Y := 1]
+q66_dup_dt[sex == 2 & q66 == 3, Y := 1]
+
+# Print some stats
+print(q66_dup_dt[, table(Y, useNA="always")])
+print(q66_dup_dt[, unique(sitecode)])
+
+# Deal with missing values
+# Fill nulls with mode and add a separate is_missing indicator variable
+preds_for_q66 = c(preds, 'q67')
+
+# Remove any predictors without variation
+preds_for_q66 = Filter(function(p) { length(unique(q66_dup_dt[, get(p)])) > 1 }, preds_for_q66)
+
+for(p in preds_for_q66) {
+  
+  q66_dup_dt[, (paste0(p,"_is_missing")) := ifelse(is.na(get(p)),1,0)]
+  q66_dup_dt[get(paste0(p,"_is_missing")) == 1, 
+            (p) := getmode(q66_dup_dt[!is.na(get(p)),get(p)])]
+  
+  # make all predictors factors
+  q66_dup_dt[, (p) := as.factor(get(p))]
+}
+
+# make sure continuous predictors are numeric
+q66_dup_dt[, bmipct := as.numeric(as.character(bmipct))]
+q66_dup_dt[, bmi := as.numeric(as.character(bmi))]
+q66_dup_dt[, stheight := as.numeric(as.character(stheight))]
+q66_dup_dt[, stweight := as.numeric(as.character(stweight))]
+
+# Make year a factor for FEs
+q66_dup_dt[, year := as.factor(year)]
+
+# prepare model matrix
+missing_preds = grep("_is_missing", colnames(q66_dup_dt), value=T)
+q66_simp_formula_str = paste(" ~ -1 + census_region + census_division + year +",
+                         paste(preds_for_q66, collapse = " + "), "+", 
+                         paste(missing_preds, collapse = " + "))
+
+X_q66 = sparse.model.matrix(as.formula(q66_simp_formula_str), data=q66_dup_dt)
+Y_q66 = q66_dup_dt[, Y]
+w_q66 = q66_dup_dt[, weight]
+
+dt_q66_fn = q66_dup_dt[, .(sitecode, predset, year)]
+```
+
+
+### Prepare training data for Q67 (LGB Identity).
+
+```{r}
+q67_dt = merge(subset_dt, state_years_w_q67, by = c('sitecode','year'))
+
+# Add indicator for whether q66 response is present
+q67_dt = merge(q67_dt, state_years_w_q66, by = c('sitecode','year'), all.x=TRUE)
+q67_dt[is.na(have_q66), have_q66 := 0]
+q67_dt[, table(have_q66)]
+
+q67_wo_q66 = q67_dt[have_q66 == 0]
+q67_wo_q66[, predset := "Not Using Contact Responses"]
+
+# Duplicate states that have q66 answer as well
+q67_w_q66 = q67_dt[have_q66 == 1]
+q67_w_q66_null_q67 = copy(q67_w_q66)
+q67_w_q66_null_q67[, q66 := NA]
+
+q67_w_q66[, predset := "Using Contact Responses"]
+q67_w_q66_null_q67[, predset := "Not Using Contact Responses"]
+
+q67_dup_dt = rbind(q67_wo_q66, q67_w_q66, q67_w_q66_null_q67)
+
+# Encode outcome (LGB identity)
+# 1 if respondent identifies as lesbian/homosexual or bisexual.
+q67_dup_dt[, Y := 0] #ifelse(Y_missing==0, 0, NA)] # use this if want to train only on non-missing responses
+q67_dup_dt[q67 == 2, Y := 1]
+q67_dup_dt[q67 == 3, Y := 1]
+
+print(q67_dup_dt[, table(Y, useNA="always")])
+print(q67_dup_dt[, unique(sitecode)])
+
+# Remove predictors without variation
+preds_for_q67 = c(preds, 'q66')
+preds_for_q67 = Filter(function(p) { length(unique(q67_dup_dt[, get(p)])) > 1 }, preds_for_q67)
+
+# Deal with missing values
+# Fill nulls with mode and add a separate is_missing indicator
+for(p in preds_for_q67) {
+  q67_dup_dt[, (paste0(p,"_is_missing")) := ifelse(is.na(get(p)),1,0)]
+  q67_dup_dt[get(paste0(p,"_is_missing")) == 1, 
+            (p) := getmode(q67_dup_dt[!is.na(get(p)),get(p)])]
+  q67_dup_dt[, (p) := as.factor(get(p))]
+}
+
+# make sure continuous predictors are numeric
+q67_dup_dt[, bmipct := as.numeric(as.character(bmipct))]
+q67_dup_dt[, bmi := as.numeric(as.character(bmi))]
+q67_dup_dt[, stheight := as.numeric(as.character(stheight))]
+q67_dup_dt[, stweight := as.numeric(as.character(stweight))]
+
+# Make year a factor for FEs
+q67_dup_dt[, year := as.factor(year)]
+
+# prepare model matrix
+missing_preds = grep("_is_missing", colnames(q67_dup_dt), value=T)
+q67_simp_formula_str = paste(" ~ -1 + census_region + census_division + year +",
+                         paste(preds_for_q67, collapse = " + "), "+", 
+                         paste(missing_preds, collapse = " + "))
+
+X_q67 = sparse.model.matrix(as.formula(q67_simp_formula_str), data=q67_dup_dt)
+Y_q67 = q67_dup_dt[, Y]
+w_q67 = q67_dup_dt[, weight]
+
+dt_q67_fn = q67_dup_dt[, .(sitecode, predset, year)]
+print(dim(X_q67))
+```
+
+### Define main training and prediction function 
+
+```{r}
+gen_loo_preds_for_state = function(state, X, Y, w, dt, model) {
+
+  message(state)
+  message(model)
+
+  # Filter data to leave out the state we are going to make LOO predictions for.
+  # This ensures no data from this state is used for training the model.
+  dt_filtered = dt[sitecode != state]
+  X_filtered = X[dt[, sitecode] != state,]
+  Y_filtered = Y[dt[, sitecode] != state]
+  w_filtered = w[dt[, sitecode] != state]
+
+  # Train Model
+
+  if(model %in% c("logit", "lasso", "lassolog", "ridge", "ridgelog")) {
+    
+    # Define penalty factors
+    penalty_factors = rep(1, ncol(X_filtered))
+    penalty_factors[grep("census_", colnames(X_filtered))] = 0 # no penalty on FEs
+    penalty_factors[grep("year", colnames(X_filtered))] = 0 # no penalty on FEs
+    
+    # Define folds for identifying optimal lambda in penalized models
+    sitecode_ids = as.numeric(as.factor(dt_filtered$sitecode))
+    STATES_PER_FOLD = 6
+    sitecode_ids = ceiling(sitecode_ids/STATES_PER_FOLD)
+
+    if(model == "logit") {
+      
+      m = glmnet(
+        X_filtered, 
+        Y_filtered, 
+        penalty.factor = penalty_factors,
+        family = "binomial",
+        type.logistic = "modified.Newton",
+        lambda.min.ratio = 1E-6,
+        nlambda = 10
+      )
+    
+    } else if(model == "lasso") {
+      
+      m = cv.glmnet(
+        X_filtered,
+        Y_filtered,
+        parallel = TRUE,
+        foldid = sitecode_ids,
+        nfolds = max(sitecode_ids_non_missing),
+        penalty.factor = penalty_factors,
+        type.measure = "mse",
+        nlambda = 10
+      )
+
+    } else if(model == "lassolog") {
+      
+      m = cv.glmnet(
+        X_filtered,
+        Y_filtered,
+        parallel = TRUE,
+        foldid = sitecode_ids,
+        nfolds = max(sitecode_ids),
+        penalty.factor = penalty_factors,
+        type.measure = "mse",
+        family = "binomial",
+        type.logistic = "modified.Newton",
+        nlambda = 10)
+
+    } else if(model == "ridge") {
+      
+      m = cv.glmnet(
+        X_filtered, 
+        Y_filtered,
+        parallel = TRUE,
+        foldid = sitecode_ids,
+        nfolds = max(sitecode_ids),
+        penalty.factor = penalty_factors,
+        type.measure = "mse",
+        alpha = 0,
+        nlambda = 10
+      )
+
+    } else if(model == "ridgelog") {
+      
+      m = cv.glmnet(
+        X_filtered, 
+        Y_filtered,
+        parallel = TRUE,
+        foldid = sitecode_ids,
+        nfolds = max(sitecode_ids),
+        penalty.factor = penalty_factors,
+        type.measure = "mse",
+        alpha = 0,
+        family = "binomial",
+        type.logistic = "modified.Newton",
+        nlambda = 10)
+
+    } else { stop("Error: invalid model within glmnet models") }
+
+  } else if (model == "ols") {
+      m = lm.fit(X_filtered, Y_filtered)
+
+  } else if (model == "rf") {
+      region_feat_names = grep("census_region", colnames(X), value = T)
+      year_feat_names = grep("year", colnames(X), value = T)
+      
+      m = ranger(
+        num.trees = 90,
+        mtry = round(ncol(X_filtered)/3),
+        min.node.size = 10,
+        max.depth = 14,
+        oob.error = FALSE,
+        num.threads = N_CORES,
+        verbose = F,
+        seed = 13,
+        classification = F,
+        x = X_filtered,
+        y = Y_filtered,
+        always.split.variables = c(region_feat_names, year_feat_names)
+      )
+
+  } else if (model == "gbrt") {
+      
+      m = xgb.train(
+        params = list(
+          objective = "binary:logistic",
+          max_depth = 5,
+          eta = 0.10
+        ),
+        data = xgb.DMatrix(X_filtered, label = Y_filtered),
+        nrounds = 189
+      )
+
+  } else { stop("invalid model argument")}
+
+  # Make predictions at the individual response-level for the held-out state.
+
+  predset_years_to_iterate_over = unique(dt[sitecode == state, .(predset,year)])
+
+  pred_vals = rbindlist(lapply(seq_len(nrow(predset_years_to_iterate_over)), function(i) {
+
+    pred_predset = predset_years_to_iterate_over$predset[i]
+    pred_year = predset_years_to_iterate_over$year[i]
+    message(state)
+    message(pred_predset)
+    message(pred_year)
+
+    dt_pred = dt[sitecode == state & predset == pred_predset & year == pred_year]
+    X_pred = X[dt[, sitecode == state & predset == pred_predset & year == pred_year],]
+    w_pred = w[dt[, sitecode == state & predset == pred_predset & year == pred_year]]
+    Y_pred = Y[dt[, sitecode == state & predset == pred_predset & year == pred_year]]
+
+    # Change year predictor to 2017
+    X_pred_2017 = X_pred
+    if("year2015" %in% colnames(X_pred_2017)) X_pred_2017[, "year2015"] = 0
+    X_pred_2017[, "year2017"] = 1
+    dt_pred_2017 = copy(dt_pred)
+    dt_pred_2017[, year := "2017"]
+
+    if(model %in% c("lasso", "lassolog", "ridge", "ridgelog")) {
+      preds = predict(m, newx=X_pred, s = "lambda.min", type = "response")[,1]
+      preds_2017 = predict(m, newx=X_pred_2017, s = "lambda.min", type = "response")[,1]
+
+    } else if(model == "logit") {
+      preds = predict(m, newx=X_pred, s = 0, type = "response")[,1]
+      preds_2017 = predict(m, newx=X_pred_2017, s = 0, type = "response")[,1]
+    
+    } else if(model == "ols") {
+      coefs = m$coefficients
+      coefs = ifelse(is.na(coefs), 0, coefs)
+      preds = (X_pred %*% coefs)[,1]
+      preds_2017 = (X_pred_2017 %*% coefs)[,1]
+
+    } else if (model == "rf") {
+      preds = predict(m, data=X_pred, num.threads = N_CORES)$predictions
+      preds_2017 = predict(m, data=X_pred_2017, num.threads = N_CORES)$predictions
+
+    } else if (model == "gbrt") {
+      preds = predict(m, X_pred)
+      preds_2017 = predict(m, X_pred_2017)
+
+    } else { stop("invalid model at prediction step") }
+
+    # Individual response predictions
+    wm_dt = data.table(
+      prediction = preds,
+      prediction_2017 = preds_2017,
+      real_outcome = Y_pred,
+      weight = w_pred)
+
+    # Aggregate individual responses to the state level to make a state-level
+    # prediction for the held-out state.
+    prev_preds = data.table(
+        real_prop = wm_dt[,weighted.mean(real_outcome, weight, na.rm=T)],
+        pred_prop = wm_dt[,weighted.mean(prediction, weight)],
+        pred_prop_2017 = wm_dt[,weighted.mean(prediction_2017, weight)], 
+        predset = pred_predset,
+        year = pred_year,
+        pred_state = state,
+        model = model,
+        n = length(Y_pred)
+    )
+
+    return(prev_preds)
+  }))
+
+  return(pred_vals)
+}
+
+# Test
+# test_res = gen_loo_preds_for_state(state="NY", X=as.matrix(X_q66), Y=Y_q66, w=w_q66, dt=dt_q66_fn, model = "rf")
+```
+
+
+Save data and training+prediction function as RData images to speed up training when running training a cluster.
+
+```{r}
+# q66 image
+save(
+  list = c("dt_q66_fn", "w_q66", "X_q66", "Y_q66", "gen_loo_preds_for_state"),
+  file = "~/YRBS_predictions/data/yrbs_image_20210701_q66.RData", compress=F)
+
+# q67 image
+save(
+  list = c("dt_q67_fn", "w_q67", "X_q67", "Y_q67", "gen_loo_preds_for_state"),
+  file = "~/YRBS_predictions/data/yrbs_image_20210701_q67.RData", compress=F)
+```
+
+
+### Code to run locally or on a cluster to iterate over models and states
+
+```{r}
+# Define all the models and states we want to run Q66 for
+library(data.table)
+load("~/YRBS_predictions/data/yrbs_image_20210701_q66.RData")
+load("~/YRBS_predictions/data/yrbs_image_20210701_q67.RData")
+q66_models_states = as.data.table(expand.grid(q = "q66", state = dt_q66_fn[, unique(sitecode)]))
+q67_models_states = as.data.table(expand.grid(q = "q67", state = dt_q67_fn[, unique(sitecode)]))
+```
+
+```{r}
+fn_to_run_on_nodes = function(q, state) {
+  
+  library(glmnet)
+  library(doMC)
+  registerDoMC(cores = N_CORES)
+  library(data.table)
+  library(ranger)
+  library(Matrix)
+  library(xgboost)
+   
+  # Load workspace and define arguments
+  if(q == "q66") {
+    load("~/YRBS_predictions/data/yrbs_image_20210701_q66.RData")
+    X = as.matrix(X_q66)
+    Y = Y_q66
+    w = w_q66
+    dt = dt_q66_fn
+    
+  } else if (q == "q67") {
+    load("~/YRBS_predictions/data/yrbs_image_20210701_q67.RData")
+    X = as.matrix(X_q67)
+    Y = Y_q67
+    w = w_q67
+    dt = dt_q67_fn
+  
+  } else {stop("invalid argument for q")}
+    
+  # Run model and predictions, write predictions to file
+  
+  # Only using tree models for testing here.
+  models = c("rf","gbrt") # USE THIS FOR ALL MODELS: c("ols", "rf", "gbrt", "lasso", "ridge", "logit", "lassolog", "ridgelog")
+  
+  # Exclude models already run
+  OUT_PATH = "~/YRBS_predictions/data/yrbs_20210904/"
+  run_dt = as.data.table(data.table::transpose(strsplit(list.files(OUT_PATH), "_")))
+  if(nrow(run_dt)>0) {
+    setnames(run_dt, c("qs","model","st"))
+    run_dt[, st := gsub(".csv", "", st)]
+    models_left_to_run = setdiff(models, run_dt[qs == q & st == state, unique(model)])
+    message(paste(models_left_to_run, collapse = ", "))
+    if(length(models_left_to_run) == 0) {
+      message("No models left to run")
+      return(0)
+    }
+  } else {
+    models_left_to_run = models
+  }
+  
+  for(m in models_left_to_run) {
+    res = gen_loo_preds_for_state(state, X, Y, w, dt, m)
+    fwrite(res, paste0(OUT_PATH, q, "_", m, "_", state, ".csv"))
+  }
+  
+}
+
+# Test
+fn_to_run_on_nodes("q66", "NY")
+```
+
+#### Run all Q66 models locally
+
+```{r}
+for (i in seq_len(nrow(q66_models_states))) {
+  q = q66_models_states$q[i]
+  state = q66_models_states$state[i]
+  
+  fn_to_run_on_nodes(q, state)  
+}
+```
+
+
+#### Run all Q67 models locally
+
+```{r}
+for (i in seq_len(nrow(q67_models_states))) {
+  q = q67_models_states$q[i]
+  state = q67_models_states$state[i]
+  
+  fn_to_run_on_nodes(q, state)
+}
+```

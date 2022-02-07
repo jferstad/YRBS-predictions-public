@@ -1,0 +1,3 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.0729571314319849,0.0284471954150905,0.0460830633173552,0.0460830633173552,Using Identity Responses,2017,NE,ridge,717,717
+0.0729571314319849,0.0284471954150905,0.0440923634804336,0.0440923634804336,Not Using Identity Responses,2017,NE,ridge,717,717

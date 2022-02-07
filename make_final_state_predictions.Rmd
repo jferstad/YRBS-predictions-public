@@ -1,0 +1,678 @@
+---
+title: "Make State-level predictions for all states with YRBS data"
+output: md_document
+---
+
+This notebook generates state-level predictions for all states with YRBS data. 
+It combined the previously generated hold-out predictions for states with the focal questions with new predictions generated for states without the focal questions.
+
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+N_CORES = 6
+library(data.table)
+library(Matrix)
+library(parallel)
+library(ranger)
+library(printr)
+```
+
+
+```{r}
+states_combined_dt = fread('~/YRBS_predictions/data/combined_pred_data_all.csv', showProgress=TRUE)
+```
+
+
+```{r}
+subset_dt = copy(states_combined_dt)[year >= 2013]
+
+id_vars = c('sitecode', 'census_region', 'census_division', 'year', 'weight')
+varimp_inds = fread('~/YRBS_predictions/data/varimp_v1.csv')
+modeling_vars = varimp_inds[, var]
+ss_vars = c(id_vars, modeling_vars)
+ss_vars = intersect(ss_vars, colnames(subset_dt))
+subset_dt = subset_dt[, ..ss_vars]
+
+# Add indicator for whether q66 and/or q67 answer are present
+subset_dt[, have_q67 := max(ifelse(!is.na(q67), 1, 0)), by = .(sitecode, year)]
+subset_dt[, have_q66 := max(ifelse(!is.na(q66), 1, 0)), by = .(sitecode, year)]
+
+# Add indicator for whether to predict each question (if they dont have the outcome in 2017)
+subset_dt[, predict_q67 := min(ifelse(!is.na(q67) & year==2017, 0, 1)), by = 'sitecode']
+subset_dt[, predict_q66 := min(ifelse(!is.na(q66) & year==2017, 0, 1)), by = 'sitecode']
+
+print(subset_dt[,table(have_q67)])
+print(subset_dt[have_q67==1,uniqueN(sitecode)])
+print(subset_dt[,table(have_q66)])
+print(subset_dt[have_q66==1,uniqueN(sitecode)])
+
+print(subset_dt[predict_q67 == 1, unique(sitecode)])
+print(subset_dt[predict_q67 == 0, unique(sitecode)])
+print(subset_dt[predict_q66 == 1, unique(sitecode)])
+print(subset_dt[predict_q66 == 0, unique(sitecode)])
+```
+
+
+```{r}
+preds = intersect(varimp_inds[pred == "y", var], colnames(subset_dt))
+
+# Remove preds without variation
+preds = Filter(function(p) { length(unique(subset_dt[, get(p)])) > 1 }, preds)
+```
+
+
+```{r}
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+```
+
+
+```{r}
+# Fill nulls
+# Deal with missing values
+# Fill nulls with mode and add a separate is_missing indicator
+preds_to_fill = c(preds, 'q66', 'q67')
+
+for(p in preds_to_fill) {
+  subset_dt[, (paste0(p,"_is_missing")) := ifelse(is.na(get(p)),1,0)]
+  subset_dt[get(paste0(p,"_is_missing")) == 1, (p) := getmode(subset_dt[!is.na(get(p)),get(p)])]
+  
+  # make all predictors factors
+  subset_dt[, (p) := as.factor(get(p))]
+}
+
+# make sure continuous predictors are numeric
+subset_dt[, bmipct := as.numeric(bmipct)]
+subset_dt[, bmi := as.numeric(bmi)]
+subset_dt[, stheight := as.numeric(stheight)]
+subset_dt[, stweight := as.numeric(stweight)]
+
+# Make year a factor for FEs
+subset_dt[, year := as.factor(year)]
+```
+
+
+```{r}
+# Code outcomes
+
+# Same sex contacts 
+subset_dt[have_q66 == 1, Y_q66 := 0]
+subset_dt[q66 == 4, Y_q66 := 1]
+subset_dt[sex == 1 & q66 == 2, Y_q66 := 1]
+subset_dt[sex == 2 & q66 == 3, Y_q66 := 1]
+
+print(subset_dt[, table(Y_q66, useNA="always")])
+print(subset_dt[!is.na(Y_q66), unique(sitecode)])
+
+# Encode outcome
+subset_dt[have_q67==1, Y_q67 := 0]
+subset_dt[q67 == 2, Y_q67 := 1]
+subset_dt[q67 == 3, Y_q67 := 1]
+
+print(subset_dt[, table(Y_q67, useNA="always")])
+print(subset_dt[!is.na(Y_q67), unique(sitecode)])
+```
+
+
+```{r}
+# Q66 Training Data
+q66_dt = copy(subset_dt)[!is.na(Y_q66)]
+
+q66_wo_q67 = q66_dt[have_q67 == 0]
+q66_wo_q67[, predset := "Not Using Identity Responses"]
+
+# Duplicate states that have q67 answer as well
+q66_w_q67 = q66_dt[have_q67 == 1]
+q66_w_q67_null_q67 = copy(q66_w_q67)
+q66_w_q67_null_q67[, q67 := getmode(q66_w_q67_null_q67[!is.na(q67), q67])]
+q66_w_q67_null_q67[, q67_is_missing := 1]
+
+q66_w_q67[, predset := "Using Identity Responses"]
+q66_w_q67_null_q67[, predset := "Not Using Identity Responses"]
+
+q66_dup_dt = rbind(q66_wo_q67, q66_w_q67, q66_w_q67_null_q67)
+
+# prepare model matrix
+q66_preds = setdiff(
+  unique(unlist(sapply(c(preds,'q67'), function(x) grep(x, colnames(subset_dt), value=T), simplify=T))),
+  c('have_q67', 'Y_q67'))
+                
+q66_simp_formula_str = paste(" ~ -1 + census_region + census_division + year +",
+                         paste(q66_preds, collapse = " + "))
+
+X_q66 = sparse.model.matrix(as.formula(q66_simp_formula_str), data=q66_dup_dt)
+Y_q66 = q66_dup_dt[, Y_q66]
+w_q66 = q66_dup_dt[, weight]
+                
+print(nrow(X_q66))
+print(nrow(q66_dup_dt))
+```
+
+
+```{r}
+# Q66 Prediction Data 
+
+q66_dt_pred = copy(subset_dt)
+
+q66_dt_pred = q66_dt_pred[predict_q66==1] 
+X_q66_pred = sparse.model.matrix(as.formula(q66_simp_formula_str), data=q66_dt_pred)
+
+print(nrow(X_q66_pred))
+print(nrow(q66_dt_pred))
+print(q66_dt_pred[,unique(sitecode)])
+```
+
+
+```{r}
+# Q66 Male Training Data
+q66_male_dt = copy(subset_dt)[!is.na(Y_q66) & sex==2]
+
+q66_male_wo_q67 = q66_male_dt[have_q67 == 0]
+q66_male_wo_q67[, predset := "Not Using Identity Responses"]
+
+# Duplicate states that have q67 answer as well
+q66_male_w_q67 = q66_male_dt[have_q67 == 1]
+q66_male_w_q67_null_q67 = copy(q66_male_w_q67)
+q66_male_w_q67_null_q67[, q67 := getmode(q66_male_w_q67_null_q67[!is.na(q67), q67])]
+q66_male_w_q67_null_q67[, q67_is_missing := 1]
+
+q66_male_w_q67[, predset := "Using Identity Responses"]
+q66_male_w_q67_null_q67[, predset := "Not Using Identity Responses"]
+
+q66_male_dup_dt = rbind(q66_male_wo_q67, q66_male_w_q67, q66_male_w_q67_null_q67)
+
+# prepare model matrix
+q66_male_preds = setdiff(
+  unique(unlist(sapply(c(preds,'q67'), function(x) grep(x, colnames(subset_dt), value=T), simplify=T))),
+  c('have_q67', 'Y_q67'))
+                
+q66_male_simp_formula_str = paste(" ~ -1 + census_region + census_division + year +",
+                         paste(q66_male_preds, collapse = " + "))
+
+X_male_q66 = sparse.model.matrix(as.formula(q66_male_simp_formula_str), data=q66_male_dup_dt)
+Y_male_q66 = q66_male_dup_dt[, Y_q66]
+w_male_q66 = q66_male_dup_dt[, weight]
+                
+print(nrow(X_male_q66))
+print(nrow(q66_male_dup_dt))
+```
+
+
+```{r}
+# Q66 Male Prediction Data 
+
+q66_male_dt_pred = copy(subset_dt)
+
+q66_male_dt_pred = q66_male_dt_pred[predict_q66==1 & sex==2] 
+X_male_q66_pred = sparse.model.matrix(as.formula(q66_male_simp_formula_str), data=q66_male_dt_pred)
+
+print(nrow(X_male_q66_pred))
+print(nrow(q66_male_dt_pred))
+print(q66_male_dt_pred[,unique(sitecode)])
+```
+
+
+```{r}
+# Q67 Training Data
+q67_dt = copy(subset_dt)[!is.na(Y_q67)]
+
+q67_wo_q66 = q67_dt[have_q66 == 0]
+q67_wo_q66[, predset := "Not Using Contact Responses"]
+
+# Duplicate states that have q66 answer as well
+q67_w_q66 = q67_dt[have_q66 == 1]
+q67_w_q66_null_q67 = copy(q67_w_q66)
+q67_w_q66_null_q67[, q66 := getmode(q66_w_q67_null_q67[!is.na(q67), q67])]
+q67_w_q66_null_q67[, q66_is_missing := 1]
+
+q67_w_q66[, predset := "Using Contact Responses"]
+q67_w_q66_null_q67[, predset := "Not Using Contact Responses"]
+
+q67_dup_dt = rbind(q67_wo_q66, q67_w_q66, q67_w_q66_null_q67)
+
+# prepare model matrix
+q67_preds = setdiff(
+  unique(unlist(sapply(c(preds,'q66'), function(x) grep(x, colnames(subset_dt), value=T), simplify=T))),
+  c('have_q66', 'Y_q66'))
+
+# Remove preds without variation
+q67_preds = Filter(function(p) { length(unique(subset_dt[, get(p)])) > 1 }, q67_preds)
+                
+q67_simp_formula_str = paste(" ~ -1 + census_region + census_division + year +",
+                         paste(q67_preds, collapse = " + "))
+
+X_q67 = sparse.model.matrix(as.formula(q67_simp_formula_str), data=q67_dup_dt)
+Y_q67 = q67_dup_dt[, Y_q67]
+w_q67 = q67_dup_dt[, weight]
+                
+print(nrow(X_q67))
+print(nrow(q67_dup_dt))
+```
+
+
+```{r}
+# Q67 Prediction Data 
+
+q67_dt_pred = copy(subset_dt)
+
+q67_dt_pred = q67_dt_pred[predict_q67==1] 
+X_q67_pred = sparse.model.matrix(as.formula(q67_simp_formula_str), data=q67_dt_pred)
+
+print(nrow(X_q67_pred))
+print(nrow(q67_dt_pred))
+print(q67_dt_pred[, unique(sitecode)])
+```
+
+
+```{r}
+# Save stuff to save time later
+save(
+  list = c(
+     "X_q66", "Y_q66", "w_q66", "X_q66_pred", "q66_dt_pred",
+     "X_male_q66", "Y_male_q66", "w_male_q66", "X_male_q66_pred", "q66_male_dt_pred",
+     "X_q67", "Y_q67", "w_q67", "X_q67_pred", "q67_dt_pred"
+  ),
+  file = "~/YRBS_predictions/data/yrbs_pred_image_20210918.RData", compress=F)
+```
+
+## Train models
+
+```{r}
+N_CORES = 6
+
+library(data.table)
+library(Matrix)
+library(parallel)
+library(ranger)
+
+load("~/YRBS_predictions/data/yrbs_pred_image_20210918.RData")
+```
+
+
+```{r}
+region_feat_names = grep("census_region", colnames(X_q66), value = T)
+year_feat_names = grep("year", colnames(X_q66), value = T)
+m_q66 = ranger(
+  num.trees = 90,
+  mtry = round(ncol(X_q66)/3),
+  min.node.size = 10,
+  max.depth = 14,
+  oob.error = TRUE,
+  num.threads = N_CORES,
+  verbose = F,
+  seed = 13,
+  classification = F,
+  x = X_q66,
+  y = Y_q66,
+  always.split.variables = c(region_feat_names, year_feat_names)
+)
+```
+
+
+```{r}
+region_feat_names = grep("census_region", colnames(X_male_q66), value = T)
+year_feat_names = grep("year", colnames(X_male_q66), value = T)
+m_q66_male = ranger(
+  num.trees = 90,
+  mtry = round(ncol(X_male_q66)/3),
+  min.node.size = 10,
+  max.depth = 14,
+  oob.error = TRUE,
+  num.threads = N_CORES,
+  verbose = F,
+  seed = 13,
+  classification = F,
+  x = X_male_q66,
+  y = Y_male_q66,
+  always.split.variables = c(region_feat_names, year_feat_names)
+)
+```
+
+
+```{r}
+region_feat_names = grep("census_region", colnames(X_q67), value = T)
+year_feat_names = grep("year", colnames(X_q67), value = T)
+m_q67 = ranger(
+  num.trees = 90,
+  mtry = round(ncol(X_q67)/3),
+  min.node.size = 10,
+  max.depth = 14,
+  oob.error = TRUE,
+  num.threads = N_CORES,
+  verbose = F,
+  seed = 13,
+  classification = F,
+  x = X_q67,
+  y = Y_q67,
+  always.split.variables = c(region_feat_names, year_feat_names)
+)
+```
+
+
+```{r}
+# Save stuff to save time later
+save(
+  list = c(
+     "X_q66", "Y_q66", "w_q66", "X_q66_pred", "q66_dt_pred", "m_q66",
+     "X_male_q66", "Y_male_q66", "w_male_q66", "X_male_q66_pred", "q66_male_dt_pred", "m_q66_male",
+     "X_q67", "Y_q67", "w_q67", "X_q67_pred", "q67_dt_pred", "m_q67"
+  ),
+  file = "~/YRBS_predictions/data/yrbs_pred_image_20210918.RData", compress=F)
+```
+
+## Make predictions
+
+```{r}
+N_CORES = 16
+
+library(data.table)
+library(Matrix)
+library(parallel)
+library(ranger)
+
+load("~/YRBS_predictions/data/yrbs_pred_image_20210918.RData")
+```
+
+
+```{r}
+# Q66 predictions
+
+# Change year FE to 2017
+X_q66_pred = as.matrix(X_q66_pred)
+X_q66_pred[, "year2017"] = 1
+
+# Add missing col
+X_q66_pred_t = cbind(X_q66_pred, `census_divisionNew England` = 0)
+
+# Make predictions
+q66_preds = predict(m_q66, data = X_q66_pred_t, num.threads = N_CORES)$predictions
+
+# Weighted prevalence predictions by state year
+q66_dt_pred[, pred := q66_preds]
+q66_state_year_preds = q66_dt_pred[, .(
+  real_prev = weighted.mean(Y_q66, weight),
+  pred_prev_2017 = weighted.mean(pred, weight),
+  any_q67_data = max(have_q67)),
+  by = .(sitecode, year)]
+
+setorder(q66_state_year_preds, -year)
+q66_state_year_preds[year!=2017, year_rank := seq_len(.N), by='sitecode']
+q66_state_year_preds = q66_state_year_preds[year==2017 | year_rank==1]
+
+q66_state_year_preds
+```
+
+
+```{r}
+# Q66 male predictions
+# Change year FE to 2017
+X_male_q66_pred = as.matrix(X_male_q66_pred)
+X_male_q66_pred[, "year2017"] = 1
+
+# Add missing col
+X_male_q66_pred_t = cbind(X_male_q66_pred, `census_divisionNew England` = 0)
+
+# Make predictions
+q66_male_preds = predict(m_q66_male, data = X_male_q66_pred_t, num.threads = N_CORES)$predictions
+
+# Weighted prevalence predictions by state year
+q66_male_dt_pred[, pred := q66_male_preds]
+q66_male_state_year_preds = q66_male_dt_pred[, .(
+  real_prev = weighted.mean(Y_q66, weight),
+  pred_prev_2017 = weighted.mean(pred, weight),
+  any_q67_data = max(have_q67)),
+  by = .(sitecode, year)]
+
+setorder(q66_male_state_year_preds, -year)
+q66_male_state_year_preds[year!=2017, year_rank := seq_len(.N), by='sitecode']
+q66_male_state_year_preds = q66_male_state_year_preds[year==2017 | year_rank==1]
+
+q66_male_state_year_preds
+```
+
+
+```{r}
+# Q67 predictions
+# Change year FE to 2017
+X_q67_pred = as.matrix(X_q67_pred)
+X_q67_pred[, "year2017"] = 1
+
+# Add missing col
+X_q67_pred_t = cbind(X_q67_pred, `census_divisionNew England` = 0)
+
+q67_preds = predict(m_q67, data = X_q67_pred_t, num.threads = N_CORES)$predictions
+
+# Weighted prevalence predictions by state year
+q67_dt_pred[, pred := q67_preds]
+q67_state_year_preds = q67_dt_pred[, .(
+  real_prev = weighted.mean(Y_q67, weight),
+  pred_prev_2017 = weighted.mean(pred, weight),
+  any_q66_data = max(have_q66)),
+  by = .(sitecode, year)]
+
+setorder(q67_state_year_preds, -year)
+q67_state_year_preds[year!=2017, year_rank := seq_len(.N), by='sitecode']
+q67_state_year_preds = q67_state_year_preds[year==2017 | year_rank==1]
+
+q67_state_year_preds
+```
+
+Load errors and create prediction intervals
+
+```{r}
+error_dt = fread('~/YRBS_predictions/data/error_dt.csv')
+```
+
+
+```{r}
+q66_state_year_preds[, pred_method := "Error"]
+q66_state_year_preds[year!=2017, pred_method := "Previous year without other focal Q"]
+q66_state_year_preds[any_q67_data==1 & year==2017, pred_method := "Same year with other focal Q"]
+q66_state_year_preds[any_q67_data==0 & year==2017, pred_method := "Same year without other focal Q"]
+print(q66_state_year_preds[, table(pred_method)])
+
+q66_male_state_year_preds[, pred_method := "Error"]
+q66_male_state_year_preds[year!=2017, pred_method := "Previous year without other focal Q"]
+q66_male_state_year_preds[any_q67_data==1 & year==2017, pred_method := "Same year with other focal Q"]
+q66_male_state_year_preds[any_q67_data==0 & year==2017, pred_method := "Same year without other focal Q"]
+print(q66_male_state_year_preds[, table(pred_method)])
+
+q67_state_year_preds[, pred_method := "Error"]
+q67_state_year_preds[year!=2017, pred_method := "Previous year without other focal Q"]
+q67_state_year_preds[any_q66_data==1 & year==2017, pred_method := "Same year with other focal Q"]
+q67_state_year_preds[any_q66_data==0 & year==2017, pred_method := "Same year without other focal Q"]
+print(q67_state_year_preds[, table(pred_method)])
+```
+
+
+```{r}
+q66_preds = merge(q66_state_year_preds, error_dt[q=='q66'], by=c('pred_method'))[,.(
+    sitecode,
+    pred_method,
+    real_prev,
+    pred_prev_2017 = pred_prev_2017 + oob_mean_bias,
+    pred_prev_2017_lb = pred_prev_2017 + oob_mean_bias - qt(0.975, t_dist_df)*oob_sd,
+    pred_prev_2017_ub = pred_prev_2017 + oob_mean_bias + qt(0.975, t_dist_df)*oob_sd
+  )]
+
+q66_preds[pred_method == "Previous year without other focal Q", real_prev := NA]
+
+q66_preds
+```
+
+
+```{r}
+q66_male_preds = merge(q66_male_state_year_preds, error_dt[q=='q66_male'], by=c('pred_method'))[,.(
+    sitecode,
+    pred_method,
+    real_prev,
+    pred_prev_2017 = pred_prev_2017 + oob_mean_bias,
+    pred_prev_2017_lb = pred_prev_2017 + oob_mean_bias - qt(0.975, t_dist_df)*oob_sd,
+    pred_prev_2017_ub = pred_prev_2017 + oob_mean_bias + qt(0.975, t_dist_df)*oob_sd
+  )]
+
+q66_male_preds[pred_method == "Previous year without other focal Q", real_prev := NA]
+
+q66_male_preds
+```
+
+
+```{r}
+q67_preds = merge(q67_state_year_preds, error_dt[q=='q67'], by=c('pred_method'))[,.(
+    sitecode,
+    pred_method,
+    real_prev,
+    pred_prev_2017 = pred_prev_2017 + oob_mean_bias,
+    pred_prev_2017_lb = pred_prev_2017 + oob_mean_bias - qt(0.975, t_dist_df)*oob_sd,
+    pred_prev_2017_ub = pred_prev_2017 + oob_mean_bias + qt(0.975, t_dist_df)*oob_sd
+  )]
+
+q67_preds[pred_method == "Previous year without other focal Q", real_prev := NA]
+
+q67_preds
+```
+
+
+```{r}
+# dcast
+q67_preds[,pred_txt := paste0(
+  format(pred_prev_2017*100,digits=0,nsmall=1,trim=T), " (", 
+  format(pred_prev_2017_lb*100,digits=0,nsmall=1,trim=T), ", ", 
+  format(pred_prev_2017_ub*100,digits=0,nsmall=1,trim=T), ")")]
+q67_preds_wide = dcast(q67_preds, sitecode ~ pred_method, value.var = c('pred_txt'))
+q67_preds_wide[is.na(q67_preds_wide)] = ''
+setnames(q67_preds_wide, 'sitecode', 'pred_state')
+q67_preds_wide
+```
+
+
+```{r}
+# dcast
+q66_preds[,pred_txt := paste0(
+  format(pred_prev_2017*100,digits=0,nsmall=1,trim=T), " (", 
+  format(pred_prev_2017_lb*100,digits=0,nsmall=1,trim=T), ", ", 
+  format(pred_prev_2017_ub*100,digits=0,nsmall=1,trim=T), ")")]
+q66_preds_wide = dcast(q66_preds, sitecode ~ pred_method, value.var = c('pred_txt'))
+q66_preds_wide[is.na(q66_preds_wide)] = ''
+setnames(q66_preds_wide, 'sitecode', 'pred_state')
+q66_preds_wide
+```
+
+
+```{r}
+# dcast
+q66_male_preds[,pred_txt := paste0(
+  format(pred_prev_2017*100,digits=0,nsmall=1,trim=T), " (", 
+  format(pred_prev_2017_lb*100,digits=0,nsmall=1,trim=T), ", ", 
+  format(pred_prev_2017_ub*100,digits=0,nsmall=1,trim=T), ")")]
+q66_male_preds_wide = dcast(q66_male_preds, sitecode ~ pred_method, value.var = c('pred_txt'))
+q66_male_preds_wide[is.na(q66_male_preds_wide)] = ''
+setnames(q66_male_preds_wide, 'sitecode', 'pred_state')
+q66_male_preds_wide
+```
+
+Combine OOB training predictions with these predictions
+
+```{r}
+q67_oob_preds = fread('~/YRBS_predictions/data/q67_merged_preds.csv')
+q67_combo_preds = rbind(q67_oob_preds, q67_preds_wide[!(pred_state %in% q67_oob_preds$pred_state)], fill=T)
+q67_combo_preds[is.na(q67_combo_preds)] = ''
+q67_combo_preds
+```
+
+
+```{r}
+q66_oob_preds = fread('~/YRBS_predictions/data/q66_merged_preds.csv')
+q66_combo_preds = rbind(q66_oob_preds, q66_preds_wide[!(pred_state %in% q66_oob_preds$pred_state)], fill=T)
+q66_combo_preds[is.na(q66_combo_preds)] = ''
+q66_combo_preds
+```
+
+
+```{r}
+q66_male_oob_preds = fread('~/YRBS_predictions/data/q66_male_merged_preds.csv')
+q66_male_combo_preds = rbind(q66_male_oob_preds, q66_male_preds_wide[!(pred_state %in% q66_male_oob_preds$pred_state)], fill=T)
+q66_male_combo_preds[is.na(q66_male_combo_preds)] = ''
+q66_male_combo_preds
+```
+
+
+Evaluate predictions (MAE, Coverage, Rsq)
+
+```{r}
+q67_raw_preds = fread('~/YRBS_predictions/data/q67_raw_preds.csv')
+q66_raw_preds = fread('~/YRBS_predictions/data/q66_raw_preds.csv')
+q66_male_raw_preds = fread('~/YRBS_predictions/data/q66_male_raw_preds.csv')
+
+gen_pred_eval_metrics = function(pred_dt) {
+  eval_dt = copy(pred_dt)
+
+  eval_agg_dt = eval_dt[,.(
+    real_sd = sd(real_prev, na.rm=T),
+    real_avg_mae = mean(abs(real_prev-mean(real_prev)), na.rm=T),
+    mae = mean(abs(real_prev-norm_oob_pe), na.rm=T),
+    rmse = sqrt(mean((real_prev-norm_oob_pe)^2, na.rm=T)),
+    coverage = mean(real_prev >= norm_oob_lb & real_prev <= norm_oob_ub, na.rm=T),
+    .N
+    ), by = 'pred_method']
+  
+  return(eval_agg_dt)
+}
+
+gen_pred_eval_metrics(q67_raw_preds)
+```
+
+
+```{r}
+gen_pred_eval_metrics(q66_raw_preds)
+```
+
+
+```{r}
+gen_pred_eval_metrics(q66_male_raw_preds)
+```
+
+
+Exports for maps
+
+```{r}
+q66_real_prevs = fread('~/YRBS_predictions/data/q66_real_prevs.csv')
+q66_pred_pes = dcast(q66_preds, sitecode ~ pred_method, value.var = c('pred_prev_2017'))
+q66_pred_pes[, final_pred := fcoalesce(`Same year with other focal Q`,`Same year without other focal Q`,`Previous year without other focal Q`)]
+q66_map_t = rbind(q66_real_prevs[,.(State = pred_state, map_value = real_prev, obs_prev = 1)], q66_pred_pes[!(sitecode %in% q66_real_prevs$pred_state),.(State=sitecode, map_value = final_pred, obs_prev=0)])
+q66_map_t
+```
+
+
+```{r}
+q66_male_real_prevs = fread('~/YRBS_predictions/data/q66_male_real_prevs.csv')
+q66_male_pred_pes = dcast(q66_male_preds, sitecode ~ pred_method, value.var = c('pred_prev_2017'))
+q66_male_pred_pes[, final_pred := fcoalesce(`Same year with other focal Q`,`Same year without other focal Q`,`Previous year without other focal Q`)]
+q66_male_map_t = rbind(q66_male_real_prevs[,.(State = pred_state, map_value = real_prev, obs_prev = 1)], q66_male_pred_pes[!(sitecode %in% q66_male_real_prevs$pred_state),.(State=sitecode, map_value = final_pred, obs_prev=0)])
+q66_male_map_t
+```
+
+
+```{r}
+q67_real_prevs = fread('~/YRBS_predictions/data/q67_real_prevs.csv')
+q67_pred_pes = dcast(q67_preds, sitecode ~ pred_method, value.var = c('pred_prev_2017'))
+q67_pred_pes[, final_pred := fcoalesce(`Same year without other focal Q`,`Previous year without other focal Q`)]
+q67_map_t = rbind(q67_real_prevs[,.(State = pred_state, map_value = real_prev, obs_prev = 1)], q67_pred_pes[!(sitecode %in% q67_real_prevs$pred_state),.(State=sitecode, map_value = final_pred, obs_prev=0)])
+q67_map_t
+```
+
+
+Scatter of LGB and Same Sex Contacts for sanity check
+
+```{r, fig.width=10}
+library(ggplot2)
+scatter_t = merge(
+  q66_map_t[,.(State,q66_prev=map_value,q66_obs=obs_prev)],
+  q67_map_t[,.(State,q67_prev=map_value,q67_obs=obs_prev)],
+  by='State')
+scatter_t[,both_obs:=q66_obs*q67_obs]
+ggplot(scatter_t, aes(x=q67_prev,y=q66_prev,color=factor(both_obs))) + geom_point() + theme_bw() + geom_smooth(method="lm", se=F) + geom_abline(intercept=0,slope=1,linetype="dashed") +
+coord_cartesian(xlim=c(0.05,0.15),ylim=c(0.05,0.12))
+```
+

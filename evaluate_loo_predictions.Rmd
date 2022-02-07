@@ -1,0 +1,627 @@
+
+---
+title: "Evaluate Leave-One-Out State-level Predictions"
+output: md_document
+---
+
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+library(data.table)
+library(ggplot2)
+library(rpart)
+library(irr)
+library(Hmisc)
+library(printr)
+```
+
+#### Load LOO State predictions from train_and_predict notebooks
+
+```{r, warning=FALSE}
+q66_prevalence_preds = rbindlist(lapply(
+  grep("q66", list.files("~/YRBS_predictions/data/yrbs_20210904", full.names=T), value=T), 
+  fread))
+
+q67_prevalence_preds = rbindlist(lapply(
+  grep("q67", list.files("~/YRBS_predictions/data/yrbs_20210904", full.names=T), value=T), 
+  fread))
+
+q66_male_prevalence_preds = rbindlist(lapply(
+  grep("q66", list.files("~/YRBS_predictions/data/yrbs_males_q66_20210904", full.names=T), value=T), 
+  fread))
+
+print(nrow(q67_prevalence_preds[year == 2017 & predset == "Using Contact Responses"]))
+```
+
+
+```{r}
+# Encode true state-level proportions (2017 YRBS estimates)
+q66_true_prevalences = q66_prevalence_preds[year == 2017, .(real_prev = mean(real_prop)),  by=c('pred_state')]
+q67_true_prevalences = q67_prevalence_preds[year == 2017, .(real_prev = mean(real_prop)),  by=c('pred_state')]
+q66_male_true_prevalences = q66_male_prevalence_preds[year == 2017, .(real_prev = mean(real_prop)),  by=c('pred_state')]
+```
+
+#### For each model, prediction dataset, calculate ICC and prediction interval coverage
+
+```{r}
+get_eval_stats = function(true_prevalences, prevalence_preds, pred_method, pred_model, pred_predset, pred_year, pred_col) {
+  
+  subset_dt = prevalence_preds[
+    model == pred_model &
+    predset == pred_predset &
+    year == pred_year
+  ]
+
+  pred_prev_by_state = subset_dt[,.(
+    pred_state,
+    pred_prev = get(pred_col),
+    n
+  )]
+
+  # add real prevs
+  pred_prev_by_state = merge(pred_prev_by_state, true_prevalences, by = 'pred_state')
+
+  # prediction intervals using empirical out-of-bag T distribtion
+  pred_prev_by_state = rbindlist(lapply(pred_prev_by_state[, unique(pred_state)], function(s) {
+
+    oob_mean_bias = pred_prev_by_state[pred_state != s, mean(real_prev - pred_prev)]
+    #message(paste("oob_mean_bias:", oob_mean_bias))
+    oob_sd = pred_prev_by_state[pred_state != s, sd(real_prev - pred_prev)]
+    oob_df = pred_prev_by_state[pred_state != s, .N] - 1
+    
+    real_prev_interval = binconf(pred_prev_by_state[pred_state == s, real_prev*n], 
+                                 pred_prev_by_state[pred_state == s, n])
+
+    return(data.table(
+      pred_state = s,
+      real_prev = pred_prev_by_state[pred_state == s, real_prev],
+      real_prev_lb = real_prev_interval[,"Lower"],
+      real_prev_ub = real_prev_interval[,"Upper"],
+      # T out-of-bag method
+      norm_oob_pe = pred_prev_by_state[pred_state == s, pred_prev + oob_mean_bias],
+      norm_oob_lb = pred_prev_by_state[pred_state == s, pred_prev + oob_mean_bias - qt(0.975, oob_df)*oob_sd],
+      norm_oob_ub = pred_prev_by_state[pred_state == s, pred_prev + oob_mean_bias + qt(0.975, oob_df)*oob_sd]
+    ))
+
+  }))
+
+  # add columns to state predictions dt
+  pred_prev_by_state[,`:=`(
+    pred_method = pred_method,
+    pred_model = pred_model
+  )]
+
+  # summary result dt
+  oob_icc_res = icc(pred_prev_by_state[, .(norm_oob_pe, real_prev)], model = "oneway", type = "agreement", unit = "average")
+  summary_dt = data.table(
+    pred_method,
+    pred_model,
+    oob_icc = round(oob_icc_res$value,3),
+    oob_icc_pval = round(oob_icc_res$p.value,3),
+    oob_coverage = mean(pred_prev_by_state[, norm_oob_lb < real_prev & norm_oob_ub > real_prev])
+  )
+
+  return(list(
+    state_predictions = pred_prev_by_state,
+    summary_stats = summary_dt
+  ))
+}
+
+
+# TEST
+
+get_eval_stats(
+  true_prevalences = q66_male_true_prevalences,
+  prevalence_preds = q66_male_prevalence_preds, 
+  pred_method = "Same year with other focal Q",
+  pred_model = "rf", 
+  pred_predset = "Using Identity Responses",
+  pred_year = 2017, 
+  pred_col = "pred_prop")$summary_stats
+```
+#### Inspect LOO RF predictions for each state and prediction dataset
+
+```{r}
+MODEL = "rf"
+
+q66_state_preds = rbind(
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$state_predictions
+)
+
+q66_real_prevs_states = unique(q66_state_preds[pred_method == "Same year without other focal Q", .(pred_state, real_prev, real_prev_lb, real_prev_ub)])
+q66_real_prevs_states[, real_txt := paste0(
+  format(real_prev*100,digits=0,nsmall=1), " (", 
+  format(real_prev_lb*100,digits=0,nsmall=1), ", ", 
+  format(real_prev_ub*100,digits=0,nsmall=1), ")")]
+q66_real_prevs_states = q66_real_prevs_states[, .(pred_state, real_txt)]
+#display(q66_real_prevs_states)
+
+q66_pred_prevs_states = q66_state_preds[, .(pred_state, norm_oob_pe, norm_oob_lb, norm_oob_ub, pred_method)]
+q66_pred_prevs_states[, pred_txt := paste0(
+  format(norm_oob_pe*100,digits=0,nsmall=1), " (", 
+  format(norm_oob_lb*100,digits=0,nsmall=1), ", ", 
+  format(norm_oob_ub*100,digits=0,nsmall=1), ")")]
+q66_pred_prevs_states_cast = dcast(q66_pred_prevs_states, pred_state ~ pred_method, value.var=c('pred_txt'))
+#display(q66_pred_prevs_states_cast)
+
+q66_merged = merge(q66_real_prevs_states, q66_pred_prevs_states_cast, by='pred_state')
+q66_merged[is.na(q66_merged)] = ""
+q66_merged = q66_merged[,.(
+    pred_state, real_txt, `Same year with other focal Q`, `Same year without other focal Q`, `Previous year without other focal Q`
+)]
+fwrite(unique(q66_state_preds[, .(pred_state, real_prev)]), '~/YRBS_predictions/data/q66_real_prevs.csv')
+fwrite(q66_merged, '~/YRBS_predictions/data/q66_merged_preds.csv')
+fwrite(merge(q66_pred_prevs_states, unique(q66_state_preds[, .(pred_state, real_prev)]), by='pred_state'), '~/YRBS_predictions/data/q66_raw_preds.csv')
+q66_merged
+```
+
+
+
+```{r}
+MODEL = "rf"
+
+q67_state_preds = rbind(
+  get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$state_predictions
+)
+
+q67_real_prevs_states = q67_state_preds[pred_method == "Same year without other focal Q", .(pred_state, real_prev, real_prev_lb, real_prev_ub)]
+q67_real_prevs_states[, real_txt := paste0(
+  format(real_prev*100,digits=0,nsmall=1,trim=T), " (", 
+  format(real_prev_lb*100,digits=0,nsmall=1,trim=T), ", ", 
+  format(real_prev_ub*100,digits=0,nsmall=1,trim=T), ")")]
+q67_real_prevs_states = q67_real_prevs_states[, .(pred_state, real_txt)]
+
+q67_pred_prevs_states = q67_state_preds[, .(pred_state, norm_oob_pe, norm_oob_lb, norm_oob_ub, pred_method)]
+q67_pred_prevs_states[, pred_txt := paste0(
+  format(norm_oob_pe*100,digits=0,nsmall=1,trim=T), " (", 
+  format(norm_oob_lb*100,digits=0,nsmall=1,trim=T), ", ", 
+  format(norm_oob_ub*100,digits=0,nsmall=1,trim=T), ")")]
+
+q67_pred_prevs_states_cast = dcast(q67_pred_prevs_states, pred_state ~ pred_method, value.var=c('pred_txt'))
+
+q67_merged = merge(q67_real_prevs_states, q67_pred_prevs_states_cast, by='pred_state')
+q67_merged[is.na(q67_merged)] = ""
+q67_merged = q67_merged[,.(
+    pred_state, real_txt, `Same year with other focal Q`, `Same year without other focal Q`, `Previous year without other focal Q`
+)]
+fwrite(q67_merged, '~/YRBS_predictions/data/q67_merged_preds.csv')
+fwrite(merge(q67_pred_prevs_states, unique(q67_state_preds[, .(pred_state, real_prev)]), by='pred_state'), '~/YRBS_predictions/data/q67_raw_preds.csv')
+fwrite(unique(q67_state_preds[, .(pred_state, real_prev)]), '~/YRBS_predictions/data/q67_real_prevs.csv')
+q67_merged
+```
+
+
+```{r}
+MODEL = "rf"
+
+q66_male_state_preds = rbind(
+  get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = MODEL, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$state_predictions
+)
+
+q66_male_real_prevs_states = unique(q66_male_state_preds[pred_method == "Same year without other focal Q", .(pred_state, real_prev, real_prev_lb, real_prev_ub)])
+q66_male_real_prevs_states[, real_txt := paste0(
+  format(real_prev*100,digits=0,nsmall=1), " (", 
+  format(real_prev_lb*100,digits=0,nsmall=1), ", ", 
+  format(real_prev_ub*100,digits=0,nsmall=1), ")")]
+q66_male_real_prevs_states = q66_male_real_prevs_states[, .(pred_state, real_txt)]
+#display(q66_real_prevs_states)
+
+q66_male_pred_prevs_states = q66_male_state_preds[, .(pred_state, norm_oob_pe, norm_oob_lb, norm_oob_ub, pred_method)]
+q66_male_pred_prevs_states[, pred_txt := paste0(
+  format(norm_oob_pe*100,digits=0,nsmall=1), " (", 
+  format(norm_oob_lb*100,digits=0,nsmall=1), ", ", 
+  format(norm_oob_ub*100,digits=0,nsmall=1), ")")]
+q66_male_pred_prevs_states_cast = dcast(q66_male_pred_prevs_states, pred_state ~ pred_method, value.var=c('pred_txt'))
+#display(q66_pred_prevs_states_cast)
+
+q66_male_merged = merge(q66_male_real_prevs_states, q66_male_pred_prevs_states_cast, by='pred_state')
+q66_male_merged[is.na(q66_male_merged)] = ""
+q66_male_merged = q66_male_merged[,.(
+    pred_state, real_txt, `Same year with other focal Q`, `Same year without other focal Q`, `Previous year without other focal Q`
+)]
+fwrite(unique(q66_male_state_preds[, .(pred_state, real_prev)]), '~/YRBS_predictions/data/q66_male_real_prevs.csv')
+fwrite(q66_male_merged, '~/YRBS_predictions/data/q66_male_merged_preds.csv')
+fwrite(merge(q66_male_pred_prevs_states, unique(q66_male_state_preds[, .(pred_state, real_prev)]), by='pred_state'), '~/YRBS_predictions/data/q66_male_raw_preds.csv')
+q66_male_merged
+```
+#### Evaluation summaries for each model type and prediction dataset (Q66)
+
+```{r}
+q66_all_model_summaries = rbind(
+  rbindlist(lapply(q66_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = m, 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q66_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q66_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$summary_stats
+    }))
+)
+
+q66_long_version = q66_all_model_summaries[,.(
+    pred_method, pred_model,
+    label = paste0("ICC: ", oob_icc, " (p-val: ", oob_icc_pval,"); Coverage: ", round(oob_coverage,2)))]
+
+q66_long_version[, pred_model := factor(pred_model, levels = c("ols", "logit", "lasso", "lassolog", "ridge", "ridgelog", "rf", "gbrt"))]
+q66_long_version[, pred_method := factor(pred_method, levels = c("Same year with other focal Q", "Same year without other focal Q", "Previous year without other focal Q"))]
+
+dcast(q66_long_version, pred_model ~ pred_method, value.var = "label")
+```
+
+#### Evaluation summaries for each model type and prediction dataset (Q67)
+
+```{r}
+q67_all_model_summaries = rbind(
+  rbindlist(lapply(q67_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = m, 
+    pred_predset = "Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q67_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q67_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$summary_stats
+    }))
+)
+
+q67_long_version = q67_all_model_summaries[,.(
+    pred_method, pred_model,
+    label = paste0("ICC: ", oob_icc, " (p-val: ", oob_icc_pval,"); Coverage: ", round(oob_coverage,2)))]
+
+q67_long_version[, pred_model := factor(pred_model, levels = c("ols", "logit", "lasso", "lassolog", "ridge", "ridgelog", "rf", "gbrt"))]
+q67_long_version[, pred_method := factor(pred_method, levels = c("Same year with other focal Q", "Same year without other focal Q", "Previous year without other focal Q"))]
+
+dcast(q67_long_version, pred_model ~ pred_method, value.var = "label")
+```
+
+
+#### Evaluation summaries for each model type and prediction dataset (Q66 male)
+
+```{r}
+q66_male_all_model_summaries = rbind(
+  rbindlist(lapply(q66_male_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = m, 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q66_male_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop")$summary_stats
+    })),
+  rbindlist(lapply(q66_male_prevalence_preds[, unique(model)], function(m) {
+    get_eval_stats(
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = m, 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")$summary_stats
+    }))
+)
+
+q66_male_long_version = q66_male_all_model_summaries[,.(
+    pred_method, pred_model,
+    label = paste0("ICC: ", oob_icc, " (p-val: ", oob_icc_pval,"); Coverage: ", round(oob_coverage,2)))]
+
+q66_male_long_version[, pred_model := factor(pred_model, levels = c("ols", "logit", "lasso", "lassolog", "ridge", "ridgelog", "rf", "gbrt"))]
+q66_male_long_version[, pred_method := factor(pred_method, levels = c("Same year with other focal Q", "Same year without other focal Q", "Previous year without other focal Q"))]
+
+dcast(q66_male_long_version, pred_model ~ pred_method, value.var = "label")
+```
+
+#### Calculate LOO errors by prediction method for prediction intervals
+
+```{r}
+get_errors = function(q, true_prevalences, prevalence_preds, pred_method, pred_model, pred_predset, pred_year, pred_col) {
+  
+  subset_dt = prevalence_preds[
+    model == pred_model &
+    predset == pred_predset &
+    year == pred_year
+  ]
+
+  pred_prev_by_state = subset_dt[,.(
+    pred_state,
+    pred_prev = get(pred_col),
+    n
+  )]
+
+  pred_prev_by_state = merge(pred_prev_by_state, true_prevalences, by = 'pred_state')
+  return(data.table(
+    q = q,
+    pred_method = pred_method, 
+    pred_model = pred_model,
+    pred_predset = pred_predset,
+    oob_mean_bias = pred_prev_by_state[, mean(real_prev - pred_prev)],
+    oob_sd = pred_prev_by_state[, sd(real_prev - pred_prev)],
+    t_dist_df = pred_prev_by_state[, .N]-1))
+}
+
+error_dt = rbind(
+  get_errors(
+    q = "q67",
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q67",
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q67",
+    true_prevalences = q67_true_prevalences,
+    prevalence_preds = q67_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Contact Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017"),
+  get_errors(
+    q = "q66",
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q66",
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q66",
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017"),
+  get_errors(
+    q = "q66_male",
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q66_male",
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017, 
+    pred_col = "pred_prop"),
+  get_errors(
+    q = "q66_male",
+    true_prevalences = q66_male_true_prevalences,
+    prevalence_preds = q66_male_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_model = "rf", 
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015, 
+    pred_col = "pred_prop_2017")
+)
+
+fwrite(error_dt, '~/YRBS_predictions/data/error_dt.csv')
+
+error_dt
+```
+
+# Visualization of a specific model and question
+
+```{r, fig.width=14}
+vis_dt_rf_q66 = rbind(
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017, 
+    pred_model = "rf",
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017,
+    pred_model = "rf", 
+    pred_col = "pred_prop")$state_predictions,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015,
+    pred_model = "rf", 
+    pred_col = "pred_prop")$state_predictions)
+
+vis_dt_rf_q66_summmary_stats = rbind(
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year with other focal Q",
+    pred_predset = "Using Identity Responses",
+    pred_year = 2017,
+    pred_model = "rf", 
+    pred_col = "pred_prop")$summary_stats,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Same year without other focal Q",
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2017,
+    pred_model = "rf", 
+    pred_col = "pred_prop")$summary_stats,
+  get_eval_stats(
+    true_prevalences = q66_true_prevalences,
+    prevalence_preds = q66_prevalence_preds, 
+    pred_method = "Previous year without other focal Q",
+    pred_predset = "Not Using Identity Responses",
+    pred_year = 2015,
+    pred_model = "rf", 
+    pred_col = "pred_prop")$summary_stats)
+
+vis_dt_rf_q66_summmary_stats[, `:=`(
+  label = paste0("ICC: ", oob_icc, " (p-val: ", oob_icc_pval,"; coverage: ", round(oob_coverage,2), ")"),
+  x = vis_dt_rf_q66[,min(real_prev)],
+  y = vis_dt_rf_q66[,max(norm_oob_pe)]
+  )]
+  
+
+ggplot(vis_dt_rf_q66, aes(x=real_prev, ymin=norm_oob_lb, y=norm_oob_pe, ymax=norm_oob_ub, label=pred_state)) + 
+  geom_pointrange() + geom_abline(intercept=0, slope=1, linetype = "dashed") + facet_wrap(~pred_method, ncol=2) + theme_bw() + 
+  geom_label(size=3, color = "black", label.padding = unit(0.15, "lines")) +
+  geom_label(data=vis_dt_rf_q66_summmary_stats, aes(label=label, x=x, y=y, fill=oob_icc), 
+             vjust=0, hjust=0, inherit.aes=FALSE, color = "white", size=5) +
+  ggtitle("Predicting Prevalence of Same-Sex Contact given Any Contact (Random Forest)") +
+  xlab("True YRBS Point Estimate") +
+  ylab("Prediction Interval") +
+  theme(strip.text=element_text(size=14)) +
+  theme(plot.title=element_text(hjust=0, size=18)) +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=14)) +
+  guides(fill=FALSE)
+```
+

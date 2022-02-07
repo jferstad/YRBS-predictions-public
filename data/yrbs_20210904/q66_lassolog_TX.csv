@@ -1,0 +1,3 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.0856576103823605,0.0677192929693558,0.0623844965216197,0.0623844965216197,Using Identity Responses,2017,TX,lassolog,2113,2113
+0.0856576103823605,0.0677192929693558,0.0585831216689565,0.0585831216689565,Not Using Identity Responses,2017,TX,lassolog,2113,2113

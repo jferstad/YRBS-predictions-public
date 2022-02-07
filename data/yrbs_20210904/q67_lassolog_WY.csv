@@ -1,0 +1,3 @@
+real_missing_prop,real_prop,pred_prop,pred_prop_2017,predset,year,pred_state,model,n,n_non_missing
+0.017519902700432,0.0752293988706872,0.0904522574783622,0.102393494866972,Using Contact Responses,2015,WY,lassolog,2424,2424
+0.017519902700432,0.0752293988706872,0.0890737615710736,0.10230181522686,Not Using Contact Responses,2015,WY,lassolog,2424,2424
