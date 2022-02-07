@@ -10,8 +10,7 @@
 | [make_final_state_predictions.md](make_final_state_predictions.md) | [make_final_state_predictions.Rmd](make_final_state_predictions.Rmd) | Combines the LOO predictions with true proportions and makes predictions for all the states without responses to the focal questions. |
 
 #### Other contents
-* `data/` contains input and output CSVs used in the R code.
+* `data/` contains input and output CSVs used in the R code. NOTE: The raw survey data is not public data. Contact the author(s) to get instructions for how to acquire the raw datasets.
 
 #### Requirements
-* Git large file storage https://git-lfs.github.com/
 * R packages loaded into the R notebooks
